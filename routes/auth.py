@@ -87,19 +87,19 @@ def create_access_token(username: str, user_id: int,
     return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
+async def get_current_user(request: Request):
     try:
+        token = request.cookies.get("access_token")
+        if token is None:
+            return None
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get('sub')
-        user_id: int = payload.get('id')
-        user_role: str = payload.get('role')
+        username: str = payload.get("sub")
+        user_id: int = payload.get("id")
         if username is None or user_id is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail='Could not validate user.')
-        return {'username': username, 'id': user_id, 'user_role': user_role}
+            return None
+        return {"username": username, "id": user_id}
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Could not validate user.')
+        raise HTTPException(status_code=404, detail="Not found")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -123,6 +123,14 @@ async def login(request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         msg = "Unknown Error"
         return templates.TemplateResponse("login.html", {"request": request, "msg": msg})
+
+
+@router.get("/logout")
+async def logout(request: Request):
+    msg = "Logout Successful"
+    response = templates.TemplateResponse("login.html", {"request": request, "msg": msg})
+    response.delete_cookie(key="access_token")
+    return response
 
 
 @router.get("/register", response_class=HTMLResponse)
