@@ -1,6 +1,6 @@
 from datetime import timedelta, datetime
 from jose import jwt, JWTError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from database import SessionLocal
 from typing import Annotated
@@ -9,6 +9,9 @@ from models import Users
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
 from starlette import status
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
 
 SECRET_KEY = '197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3'
 ALGORITHM = 'HS256'
@@ -34,7 +37,7 @@ router = APIRouter(
     prefix='/auth',
     tags=['auth']
 )
-
+templates = Jinja2Templates(directory="templates")
 
 def get_db():
     db = SessionLocal()
@@ -93,6 +96,16 @@ async def create_user(db: db_dependency,
 
     db.add(create_user_model)
     db.commit()
+
+
+@router.get("/", response_class=HTMLResponse)
+async def authentication_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.get("/register", response_class=HTMLResponse)
+async def register(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
 
 
 @router.post("/token", response_model=Token)
