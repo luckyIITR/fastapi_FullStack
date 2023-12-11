@@ -1,6 +1,6 @@
 from datetime import timedelta, datetime
 from jose import jwt, JWTError
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Form
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 
@@ -136,6 +136,37 @@ async def logout(request: Request):
 @router.get("/register", response_class=HTMLResponse)
 async def register(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
+
+
+@router.post("/register", response_class=HTMLResponse)
+async def register_user(request: Request, email: str = Form(...), username: str = Form(...),
+                        firstname: str = Form(...), lastname: str = Form(...),
+                        password: str = Form(...), password2: str = Form(...),
+                        db: Session = Depends(get_db)):
+
+    validation1 = db.query(Users).filter(Users.username == username).first()
+
+    validation2 = db.query(Users).filter(Users.email == email).first()
+
+    if password != password2 or validation1 is not None or validation2 is not None:
+        msg = "Invalid registration request"
+        return templates.TemplateResponse("register.html", {"request": request, "msg": msg})
+
+    user_model = Users()
+    user_model.username = username
+    user_model.email = email
+    user_model.first_name = firstname
+    user_model.last_name = lastname
+
+    hash_password = bcrypt_context.hash(password)
+    user_model.hashed_password = hash_password
+    user_model.is_active = True
+
+    db.add(user_model)
+    db.commit()
+
+    msg = "User successfully created"
+    return templates.TemplateResponse("login.html", {"request": request, "msg": msg})
 
 
 @router.post("/token")
