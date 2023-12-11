@@ -75,10 +75,15 @@ def authenticate_user(username: str, password: str, db):
     return user
 
 
-def create_access_token(username: str, user_id: int, role: str, expires_delta: timedelta):
-    encode = {'sub': username, 'id': user_id, 'role': role}
-    expires = datetime.utcnow() + expires_delta
-    encode.update({'exp': expires})
+def create_access_token(username: str, user_id: int,
+                        expires_delta: Optional[timedelta] = None):
+
+    encode = {"sub": username, "id": user_id}
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    encode.update({"exp": expire})
     return jwt.encode(encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -134,7 +139,6 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
     token_expires = timedelta(minutes=60)
     token = create_access_token(user.username,
                                 user.id,
-                                user.role,
                                 expires_delta=token_expires)
 
     response.set_cookie(key="access_token", value=token, httponly=True)
