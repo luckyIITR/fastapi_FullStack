@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from starlette import status
 from models import Todos
 from database import SessionLocal
@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from .auth import get_current_user
 
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
 router = APIRouter()
+templates = Jinja2Templates(directory="templates")
 
 
 def get_db():
@@ -29,6 +33,11 @@ class TodoRequest(BaseModel):
     complete: bool
 
 
+@router.get('/test')
+async def test(request: Request):
+    return templates.TemplateResponse('home.html', {'request': request})
+
+
 @router.get("/", status_code=status.HTTP_200_OK)
 async def read_all(user: user_dependency, db: db_dependency):
     if user is None:
@@ -41,7 +50,7 @@ async def read_todo(user: user_dependency, db: db_dependency, todo_id: int = Pat
     if user is None:
         raise HTTPException(status_code=401, detail='Authentication Failed')
 
-    todo_model = db.query(Todos).filter(Todos.id == todo_id)\
+    todo_model = db.query(Todos).filter(Todos.id == todo_id) \
         .filter(Todos.owner_id == user.get('id')).first()
     if todo_model is not None:
         return todo_model
@@ -66,7 +75,7 @@ async def update_todo(user: user_dependency, db: db_dependency,
     if user is None:
         raise HTTPException(status_code=401, detail='Authentication Failed')
 
-    todo_model = db.query(Todos).filter(Todos.id == todo_id)\
+    todo_model = db.query(Todos).filter(Todos.id == todo_id) \
         .filter(Todos.owner_id == user.get('id')).first()
     if todo_model is None:
         raise HTTPException(status_code=404, detail='Todo not found.')
@@ -85,7 +94,7 @@ async def delete_todo(user: user_dependency, db: db_dependency, todo_id: int = P
     if user is None:
         raise HTTPException(status_code=401, detail='Authentication Failed')
 
-    todo_model = db.query(Todos).filter(Todos.id == todo_id)\
+    todo_model = db.query(Todos).filter(Todos.id == todo_id) \
         .filter(Todos.owner_id == user.get('id')).first()
     if todo_model is None:
         raise HTTPException(status_code=404, detail='Todo not found.')

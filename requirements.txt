@@ -4,3 +4,4 @@ uvicorn
 SQLAlchemy
 passlib
 python-multipart
+Jinja2
