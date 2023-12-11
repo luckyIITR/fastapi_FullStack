@@ -1,7 +1,9 @@
 from datetime import timedelta, datetime
 from jose import jwt, JWTError
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from starlette.responses import RedirectResponse
+
 from database import SessionLocal
 from typing import Annotated
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from passlib.context import CryptContext
 from starlette import status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from typing import Optional
 
 
 SECRET_KEY = '197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3'
@@ -38,6 +41,19 @@ router = APIRouter(
     tags=['auth']
 )
 templates = Jinja2Templates(directory="templates")
+
+
+class LoginForm:
+    def __init__(self, request: Request):
+        self.request: Request = request
+        self.username: Optional[str] = None
+        self.password: Optional[str] = None
+
+    async def create_oauth_form(self):
+        form = await self.request.form()
+        self.username = form.get("email")
+        self.password = form.get("password")
+
 
 def get_db():
     db = SessionLocal()
@@ -81,26 +97,27 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
                             detail='Could not validate user.')
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(db: db_dependency,
-                      create_user_request: CreateUserRequest):
-    create_user_model = Users(
-        email=create_user_request.email,
-        username=create_user_request.username,
-        first_name=create_user_request.first_name,
-        last_name=create_user_request.last_name,
-        role=create_user_request.role,
-        hashed_password=bcrypt_context.hash(create_user_request.password),
-        is_active=True
-    )
-
-    db.add(create_user_model)
-    db.commit()
-
-
 @router.get("/", response_class=HTMLResponse)
 async def authentication_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.post("/", response_class=HTMLResponse)
+async def login(request: Request, db: Session = Depends(get_db)):
+    try:
+        form = LoginForm(request)
+        await form.create_oauth_form()
+        response = RedirectResponse(url="/todos", status_code=status.HTTP_302_FOUND)
+
+        validate_user_cookie = await login_for_access_token(response=response, form_data=form, db=db)
+
+        if not validate_user_cookie:
+            msg = "Incorrect Username or Password"
+            return templates.TemplateResponse("login.html", {"request": request, "msg": msg})
+        return response
+    except HTTPException:
+        msg = "Unknown Error"
+        return templates.TemplateResponse("login.html", {"request": request, "msg": msg})
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -108,13 +125,18 @@ async def register(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
 
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-                                 db: db_dependency):
+@router.post("/token")
+async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(),
+                                 db: Session = Depends(get_db)):
     user = authenticate_user(form_data.username, form_data.password, db)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail='Could not validate user.')
-    token = create_access_token(user.username, user.id, user.role, timedelta(minutes=20))
+        return False
+    token_expires = timedelta(minutes=60)
+    token = create_access_token(user.username,
+                                user.id,
+                                user.role,
+                                expires_delta=token_expires)
 
-    return {'access_token': token, 'token_type': 'bearer'}
+    response.set_cookie(key="access_token", value=token, httponly=True)
+
+    return True
