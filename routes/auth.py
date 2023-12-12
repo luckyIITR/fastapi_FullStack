@@ -15,11 +15,15 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 
-
 SECRET_KEY = '197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3'
 ALGORITHM = 'HS256'
 bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/token')
+
+
+class RedirectException(Exception):
+    def __init__(self, url: str):
+        self.url = url
 
 
 class CreateUserRequest(BaseModel):
@@ -77,7 +81,6 @@ def authenticate_user(username: str, password: str, db):
 
 def create_access_token(username: str, user_id: int,
                         expires_delta: Optional[timedelta] = None):
-
     encode = {"sub": username, "id": user_id}
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -98,8 +101,9 @@ async def get_current_user(request: Request):
         if username is None or user_id is None:
             return None
         return {"username": username, "id": user_id}
+
     except JWTError:
-        raise HTTPException(status_code=404, detail="Not found")
+        return None
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -143,7 +147,6 @@ async def register_user(request: Request, email: str = Form(...), username: str 
                         firstname: str = Form(...), lastname: str = Form(...),
                         password: str = Form(...), password2: str = Form(...),
                         db: Session = Depends(get_db)):
-
     validation1 = db.query(Users).filter(Users.username == username).first()
 
     validation2 = db.query(Users).filter(Users.email == email).first()
